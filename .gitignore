@@ -7,4 +7,6 @@
 privateconfig
 .DS_Store
 *.pt
-
+__pycache__/
+.vscode
+cebra/
