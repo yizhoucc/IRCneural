@@ -1,0 +1,10 @@
+*.pyc
+*.xml
+*.json
+*.zip
+*checkpoint.ipynb
+.ipynb_checkpoints
+privateconfig
+.DS_Store
+*.pt
+
