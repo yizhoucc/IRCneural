@@ -13,6 +13,7 @@ from numpy import pi
 from pathlib import Path
 import seaborn as sns
 import matplotlib.patches as mpatches
+import time
 
 # plot setting ------------------------
 plt.rcParams['font.family'] = 'Times New Roman'
@@ -452,7 +453,7 @@ def state_step2(px, py, heading, v, w, a, pro_gainv=1, pro_gainw=1, dt=0.006, us
     w = pro_gainw * a[1]
     return px, py, heading, v, w
 
-
+# from inverse functions --------------
 def process_inv(res, removegr=True, ci=5, ind=-1, usingbest=False):
     # get final theta and cov
     if type(res) == str:
@@ -480,6 +481,233 @@ def process_inv(res, removegr=True, ci=5, ind=-1, usingbest=False):
     return finaltheta, finalcov, cirange
 
 
+def monkeyloss_(agent=None,
+                actions=None,
+                tasks=None,
+                phi=None,
+                theta=None,
+                env=None,
+                num_iteration=1,
+                states=None,
+                samples=1,
+                gpu=False,
+                action_var=0.1,
+                debug=False):
+    if gpu:
+        logPr = torch.zeros(1).cuda()[0]  # torch.FloatTensor([])
+    else:
+        logPr = torch.zeros(1)[0]  # torch.FloatTensor([])
+
+    def _wrapped_call(ep, task):
+        logPr_ep = torch.zeros(1).cuda()[0] if gpu else torch.zeros(1)[0]
+        for sample_index in range(samples):
+            mkactionep = actions[ep]
+            if mkactionep == [] or mkactionep.shape[0] == 0:
+                continue
+            env.reset(theta=theta, phi=phi, goal_position=task,
+                      vctrl=mkactionep[0][0], wctrl=mkactionep[0][1])
+            numtime = len(mkactionep[1:])
+
+            # compare mk data and agent actions
+            # use a t and s t (treat st as st+1)
+            for t, mk_action in enumerate(mkactionep[1:]):
+                # agent's action
+                action = agent(env.decision_info)
+                # agent's obs, last step obs doesnt matter.
+                if t < len(states[ep])-1:
+                    if type(states[ep]) == list:
+                        nextstate = states[ep][1:][t]
+                    elif type(states[ep]) == torch.Tensor:
+                        nextstate = states[ep][1:][t].view(-1, 1)
+                    else:  # np array
+                        nextstate = torch.tensor(states[ep])[1:][t].view(-1, 1)
+                    obs = env.observations(nextstate)
+                    # agent's belief
+                    env.b, env.P = env.belief_step(
+                        env.b, env.P, obs, torch.tensor(mk_action).view(1, -1))
+                    previous_action = mk_action  # current action is prev action for next time
+                    env.trial_timer += 1
+                    env.decision_info = env.wrap_decision_info(
+                        previous_action=torch.tensor(previous_action),
+                        time=env.trial_timer)
+                # loss
+                action_loss = -1 * \
+                    logll(torch.tensor(mk_action),
+                          action, std=np.sqrt(action_var))
+                obs_loss = -1*logll(error=env.obs_err(),
+                                    std=theta[4:6].view(1, -1))
+                logPr_ep = logPr_ep + action_loss.sum() + obs_loss.sum()
+                del action_loss
+                del obs_loss
+            # if agent has not stop, compare agent action vs 0,0
+            agentstop = torch.norm(action) < env.terminal_vel
+            while not agentstop and env.trial_timer < 40:
+                action = agent(env.decision_info)
+                agentstop = torch.norm(action) < env.terminal_vel
+                obs = (torch.tensor([0.5, pi/2])*action+env.obs_err()).t()
+                env.b, env.P = env.belief_step(
+                    env.b, env.P, obs, torch.tensor(action).view(1, -1))
+                # previous_action=torch.tensor([0.,0.]) # current action is prev action for next time
+                previous_action = action
+                env.trial_timer += 1
+                env.decision_info = env.wrap_decision_info(
+                    previous_action=torch.tensor(previous_action),
+                    time=env.trial_timer)
+                # loss
+                action_loss = -1 * \
+                    logll(torch.tensor(torch.zeros(2)),
+                          action, std=np.sqrt(action_var))
+                obs_loss = -1*logll(error=env.obs_err(),
+                                    std=theta[4:6].view(1, -1))
+                logPr_ep = logPr_ep + action_loss.sum() + obs_loss.sum()
+                del action_loss
+                del obs_loss
+
+        return logPr_ep/samples/env.trial_timer.item()
+
+    tik = time.time()
+    loglls = []
+    for ep, task in enumerate(tasks):
+        logPr_ep = _wrapped_call(ep, task)
+        logPr += logPr_ep
+        loglls.append(logPr_ep)
+        del logPr_ep
+    regularization = torch.sum(1/(theta+1e-4))
+    # print('calculate loss time {:.0f}'.format(time.time()-tik))
+    if debug:
+        return loglls
+    return logPr/len(tasks)+0.01*regularization
+
+
+def logll(true=None, estimate=None, std=0.3, error=None, prob=False):
+    # print(error)
+    var = std**2
+    if error is not None:  # use for point eval, obs
+        def g(x): return 1/torch.sqrt(2*pi*torch.ones(1)) * \
+            torch.exp(-0.5*x**2/var)
+        z = 1/g(torch.zeros(1)+1e-8)
+        loss = torch.log(g(error)*z+1e-8)
+    else:  # use for distribution eval, aciton
+        c = torch.abs(true-estimate)
+        def gi(x): return -(torch.erf(x/torch.sqrt(torch.tensor([2]))/std)-1)/2
+        loss = torch.log(gi(c)*2+1e-16)
+    if prob:
+        return torch.exp(loss)
+    return loss
+
+def run_trial(agent=None, env=None, given_action=None, given_state=None, action_noise=0.1, pert=None, stimdur=None):
+    '''    
+        # return epactions,epbliefs,epbcov,epstates
+        # 10 a 10 s.
+        # when both
+        # use a1 and s2
+        # at t1, use a1. results in s2
+    '''
+
+    def _collect():
+        epactions.append(action)
+        epbliefs.append(env.b)
+        epbcov.append(env.P)
+        epstates.append(env.s)
+    # saves
+    epactions, epbliefs, epbcov, epstates = [], [], [], []
+    if given_action is not None:
+        epactions.append(torch.tensor(given_action[0]))
+    else:
+        epactions.append(env.s[3:].view(-1))
+    # print(env.s,epactions)
+    with torch.no_grad():
+        # if at least have something
+        if given_action is not None and given_state is not None:  # have both
+            t = 0
+            while t < len(given_state):
+                action = agent(env.decision_info)[0]
+                _collect()
+                # print(given_state)
+                env.step(torch.tensor(given_action[t]).reshape(
+                    1, -1), next_state=torch.tensor(given_state[t]).reshape(-1, 1))
+                t += 1
+                # print(env.s)
+        elif given_state is not None:  # have states but no actions
+            t = 0
+            while t < len(given_state):
+                action = agent(env.decision_info)[0]
+                _collect()
+                env.step(torch.tensor(action).reshape(1, -1),
+                         next_state=given_state[t].view(-1, 1))
+                t += 1
+
+        elif given_action is not None:  # have actions but no states
+            t = 0
+            while t < len(given_action):
+                action = agent(env.decision_info)[0]
+                _collect()
+                noise = torch.normal(torch.zeros(2), action_noise)
+                _action = (action+noise).clamp(-1, 1)
+                if pert is not None and int(env.trial_timer) < len(pert):
+                    _action = (given_action[t]).reshape(
+                        1, -1)+pert[int(env.trial_timer)]
+                env.step(_action)
+                t += 1
+
+        else:  # nothing
+            done = False
+            t = 0
+            while not done:
+                action = agent(env.decision_info)[0]
+                _collect()
+                noise = torch.normal(torch.zeros(2), action_noise)
+                _action = (action+noise).clamp(-1, 1)
+                if pert is not None and int(env.trial_timer) < len(pert):
+                    _action += pert[int(env.trial_timer)]
+                if stimdur is not None:
+                    _, _, done, _ = env.step(torch.tensor(_action).reshape(
+                        1, -1), predictiononly=(t >= stimdur))
+                else:
+                    _, _, done, _ = env.step(
+                        torch.tensor(_action).reshape(1, -1))
+                t += 1
+    return epactions, epbliefs, epbcov, epstates
+
+
+def run_trials(agent, env, phi, theta, task, ntrials=10, stimdur=None, given_obs=None, action_noise=0.1, pert=None, return_belief=False, given_action=None, given_state=None):
+    '''
+    # sample ntrials for same task and return states and actions
+
+    initialize the env, by (theta, phi, task)
+    then call run single trial function
+    till we have enough data to return
+    '''
+    states = []
+    actions = []
+    beliefs = []
+    covs = []
+
+    while len(states) < ntrials:
+        if given_action is not None:
+            env.debug=True
+            env.reset(phi=phi, theta=theta, goal_position=task, pro_traj=None,
+                        vctrl=given_action[0, 0], wctrl=given_action[0, 1], obs_traj=given_obs)
+        else:
+            print('given action', given_action)
+            env.reset(phi=phi, theta=theta, goal_position=task,
+                        pro_traj=None, vctrl=0., wctrl=0., obs_traj=given_obs)
+            print('init s', env.s)
+
+        epactions, epbliefs, epbcov, epstates = run_trial(
+            agent, env, given_action=given_action, given_state=given_state, pert=pert, action_noise=action_noise, stimdur=stimdur,)
+    
+        states.append(torch.stack(epstates)[:, :, 0])
+        actions.append(torch.stack(epactions))
+        beliefs.append(torch.stack(epbliefs))
+        covs.append((torch.stack(epbcov)))
+
+    if return_belief:
+        return states, actions, beliefs, covs
+    else:
+        return states, actions
+
+# end from inverse functions --------------
 def get_ci(log, low=5, high=95, threshold=2, ind=-1):
     res = [l[2] for l in log[:ind//threshold]]
     mean = log[ind][0]._mean

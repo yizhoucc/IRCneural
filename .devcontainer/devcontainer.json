@@ -1,0 +1,40 @@
+{
+    "image": "yzsimple/irc:fullv0.2.1",
+    "containerEnv": {
+        "datafolder": "/data",
+        "workspace": "/workspaces"
+    },
+    "mounts": [
+        "source=/Users/yc/Documents/lab_data,target=/data,type=bind,consistency=cached"
+        //  // devcontainer extensions
+        //  "source=ffsb-devcontainer-extensions,target=/root/.vscode-server/extensions,type=volume",
+        //  // devcontainer insiders extensions
+        //  "source=ffsb-devcontainer-insiders-extensions,target=/root/.vscode-server-insiders/extensions,type=volume"
+    ],
+    "customizations": {
+        "vscode": {
+            // Bug fix on Mac: https://github.com/microsoft/vscode-remote-release/issues/8169
+            "settings": {
+                "extensions.verifySignature": false
+            },
+            "extensions": [
+                "dbaeumer.vscode-eslint",
+                "ms-toolsai.jupyter",
+                "ms-toolsai.jupyter-renderers",
+                "ms-toolsai.jupyter-keymap"
+            ]
+        },
+        "settings": {
+            "python.defaultInterpreterPath": "/usr/local/bin/python"
+        }
+    },
+    "forwardPorts": [
+        8888
+    ],
+    "runArgs": [
+        "--memory=12gb",
+        "--cpus=4",
+        "--name",
+        "ffneural"
+    ]
+}
