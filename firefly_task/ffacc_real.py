@@ -2842,6 +2842,7 @@ class FireFlyReady(gym.Env, torch.nn.Module):
         self.recent_skipped_trials = 0
         self.recent_trials = 0
         self.debug = 0
+        self.verbose=0
         self.noise_scale = 1
         self.reward_ratio = 1
         obsdim = self.reset().shape[-1]
@@ -3083,8 +3084,9 @@ class FireFlyReady(gym.Env, torch.nn.Module):
             self.trial_counter += 1
             # print(self.trial_counter)
             if self.trial_counter != 0 and self.trial_counter % 10 == 0:
-                print('rewarded: ', self.recent_rewarded_trials, 'skipped: ', self.recent_skipped_trials,
-                      'time up: ', self.recent_timeup_trials, 'out of: ', self.recent_trials)
+                if self.verbose:
+                    print('rewarded: ', self.recent_rewarded_trials, 'skipped: ', self.recent_skipped_trials,
+                        'time up: ', self.recent_timeup_trials, 'out of: ', self.recent_trials)
                 self.recent_rewarded_trials = 0
                 self.recent_skipped_trials = 0
                 self.recent_timeup_trials = 0
@@ -3092,7 +3094,8 @@ class FireFlyReady(gym.Env, torch.nn.Module):
             # print(
             # 'distance, ', "{:.1f}".format((self.get_distance()[1]-self.goal_r).item()),
             # 'stop',self.stop,
-            print('reward: {:.1f}, cost: {:.1f}'.format(
+            if self.verbose:
+                print('reward: {:.1f}, cost: {:.1f}'.format(
                 self.trial_sum_reward, self.trial_sum_cost), 'dist {:.2f}'.format(self.prev_d.item()))
             # 'rate {:.1f}'.format((self.trial_sum_reward-self.trial_sum_cost)/(self.trial_timer+5).item())
             # )
