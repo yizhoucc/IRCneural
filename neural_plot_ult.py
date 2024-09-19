@@ -74,7 +74,7 @@ def plot_gradient_line(ax, x, y, cmap, linewidth=3):
     for i in range(len(x) - 1):
         ax.plot(x[i:i+2], y[i:i+2], color=cmap(norm(i)), alpha= np.clip(i /len(x)+0.6, 0,1), linewidth=linewidth)
 
-# cebra embedding plots -------------------------------
+# from cebra embedding plots -------------------------------
 def plot_embedding_contrast(ax, embedding, label, gray=False, beh_idx=(0, 1), idx_order=(0, 1, 2)):
     '''plot the embeeding and color by the difference between the beh_idx task varaibles'''
     if not gray:
@@ -282,7 +282,7 @@ def plot_embedding2d_contrast(ax, embedding, label, gray=False, beh_idx=(0, 1), 
     return ax
 
 
-# ruiyi neural eye analysis plot -------------------------------
+# from ruiyi neural eye analysis plot -------------------------------
 monkey_height = 10
 DT = 0.006  # DT for raw data
 
@@ -391,8 +391,6 @@ def compute_error(data1, data2, mask):
 
 
 # ---------------------
-
-
 def mytime():
     '''get date as str'''
     current_date_time = datetime.now()
@@ -453,6 +451,8 @@ def state_step2(px, py, heading, v, w, a, pro_gainv=1, pro_gainw=1, dt=0.006, us
     v = pro_gainv * a[0]
     w = pro_gainw * a[1]
     return px, py, heading, v, w
+
+
 
 # from inverse functions --------------
 def process_inv(res, removegr=True, ci=5, ind=-1, usingbest=False):
