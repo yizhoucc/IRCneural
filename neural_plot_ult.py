@@ -59,6 +59,7 @@ def quicklegend(names, colors,ax):
     legend_handles = [mpatches.Patch(color=color, label=name) for name, color in zip(names, colors)]
     ax.legend(handles=legend_handles, loc='upper right')
 
+
 def quickallspine(ax):
     '''remove all spines'''
     ax.spines['top'].set_visible(False)
