@@ -14,6 +14,9 @@ from pathlib import Path
 import seaborn as sns
 import matplotlib.patches as mpatches
 import time
+from scipy.stats import gaussian_kde
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import cross_val_predict
 
 # plot setting ------------------------
 plt.rcParams['font.family'] = 'Times New Roman'
@@ -29,10 +32,15 @@ plt.rcParams.update({
     'axes.spines.top': False, 'axes.spines.right': False,
     'savefig.dpi': 1200,
 })
-
+ 
+# colors
 state_color='blue'
 belief_color='purple'
 eye_color='red'
+cmap_eye = mcolors.LinearSegmentedColormap.from_list('eye_cmap', ['white', eye_color])
+cmap_state = mcolors.LinearSegmentedColormap.from_list('state_cmap', ['white', state_color])
+cmap_belief = mcolors.LinearSegmentedColormap.from_list('belief_cmap', ['white', belief_color])
+
 
 # notify ------------------------
 import requests
@@ -46,6 +54,16 @@ def notify(msg='plots ready', group='lab',title='plot'):
     requests.get(notification)
 
 
+def compute_scatter_density(x,y):
+    '''return density of scatters.'''
+    xy = np.vstack([x, y])
+    z = gaussian_kde(xy)(xy)
+    return z
+
+
+def solidcbar(cbar):
+    cbar.solids.set_edgecolor("face")
+    cbar.solids.set_alpha(1) 
 
 def plot_best_fit(x,y, ax, color='black'):
     slope, intercept = np.polyfit(x,y, 1)
@@ -311,13 +329,20 @@ def set_violin_plot(vp, facecolor, edgecolor, linewidth=1, alpha=1, ls='-', hatc
                  linewidth=linewidth, alpha=alpha)
 
 
-def downsample(data, bin_size=20):
+def downsample(data, bin_size=17):
     num_bin = data.shape[0] // bin_size
     data_ = data[:bin_size * num_bin]
     data_ = data_.reshape(num_bin, bin_size, data.shape[-1])
     data_ = np.nanmean(data_, axis=1)
     return data_
 
+def downsample_variance(data, bin_size=17):
+    '''return the downsampled data variance'''
+    num_bin = data.shape[0] // bin_size
+    data_ = data[:bin_size * num_bin] # time, unit
+    data_ = data_.reshape(num_bin, bin_size, data.shape[-1]) # numbins, binsize, unit
+    data_ = np.nanvar(data_, axis=1) # apply function within each bin
+    return data_
 
 def convert_location_to_angle(gaze_r, gaze_x, gaze_y, body_theta, body_x, body_y, hor_theta_eye, ver_theta_eye, monkey_height=monkey_height, DT=DT, remove_pre=True, remove_post=True):
     '''
