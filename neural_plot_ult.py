@@ -17,6 +17,10 @@ import time
 from scipy.stats import gaussian_kde
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import cross_val_predict
+from sklearn.decomposition import PCA
+from sklearn.metrics import explained_variance_score
+from scipy.stats import pearsonr
+
 
 # plot setting ------------------------
 plt.rcParams['font.family'] = 'Times New Roman'
