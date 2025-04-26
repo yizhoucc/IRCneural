@@ -11,3 +11,5 @@ __pycache__/
 cebra/
 tmp/
 *.pkl
+*.png
+*.prompt
