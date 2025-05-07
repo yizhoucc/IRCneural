@@ -13,3 +13,4 @@ tmp/
 *.pkl
 *.png
 *.prompt
+*.txt
