@@ -2863,6 +2863,7 @@ class FireFlyReady(gym.Env, torch.nn.Module):
               obs_traj=None,
               pro_traj=None,
               ):
+        
         if not self.presist_phi and phi is not None:  # when given phi upon reset, use this
             self.phi = phi
         elif not self.presist_phi and phi is None:  # normal training, random a new phi for each trial
@@ -2935,7 +2936,7 @@ class FireFlyReady(gym.Env, torch.nn.Module):
                  0, torch.ones(1)).sample()*0.05*self.theta[10]],
                 [0.],
                 [vctrl*self.theta[0]],
-                [wctrl*self.theta[1]]])
+                [wctrl*self.theta[1]]]).float()
 
     def wrap_decision_info(self,
                            b=None,
@@ -2956,6 +2957,7 @@ class FireFlyReady(gym.Env, torch.nn.Module):
             (self.goaly-py)/(self.goalx-px)).view(-1)-angle
         relative_angle = torch.clamp(relative_angle, -pi, pi)
         vecL = bcov2vec(P)
+        print(task_param)
         decision_info = torch.cat([
             relative_distance,
             relative_angle,
@@ -3026,6 +3028,7 @@ class FireFlyReady(gym.Env, torch.nn.Module):
         return phi
 
     def step(self, action, next_state=None, predictiononly=False):
+        
         action = torch.tensor(action).reshape(1, -1)
         self.a = action
         _, self.prev_d = self.get_distance(state=self.b)
@@ -3615,6 +3618,7 @@ class FireFlyPaper(FireFlyReady):
             [[torch.cos(x), -torch.sin(x)], [torch.sin(x), torch.cos(x)]])
         r = rotationmatrix(angle)
         P = P[:2, :2]
+        
         rotatedP = r.t()@P@r
         rotatedP = rotatedP.view(-1)[[0, 1, 3]]  # discrod the yx entry.
         mu = b[:2, 0]-torch.Tensor([self.goalx, self.goaly])
